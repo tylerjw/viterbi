@@ -96,16 +96,18 @@ void print_4(uint8_t byte)
 
 void print_array(uint8_t * bytes, int len)
 {
-  for(int i = 0; i < len; i++) {
+  for(int i = 0; i < len; i+=2) {
     cout << i << ": ";
-    print_8(bytes[i]);
-    cout << " - " << (int)bytes[i] << endl;
+    print_4(bytes[i]);
+    cout << "(" << (int)bytes[i] << ")   " << i << ": ";
+    print_4(bytes[i+1]);
+    cout << "(" << (int)bytes[i+1] << ")" << endl;
   }
 }
 
 /* Encodes a packet of bits using the 1/2 rate encoder
- * inBlock - 98 bits (13 bytes)
- * outBlock - 196 bits (25 bytes)
+ * inBlock - 96 bits - 48 dibits
+ * outBlock - 196 bits - 48 pairs of dibits
  */
 void trellis_1_2_encode(uint8_t * inBlock, uint8_t * outBlock)
 {
@@ -122,23 +124,49 @@ void trellis_1_2_encode(uint8_t * inBlock, uint8_t * outBlock)
   }
 
   for(int i = 0; i < 48; i++) {
-    int dibit = (inBlock[i/4] >> (6 - (i*2) % 8)) & 0x3;
+    int dibit = inBlock[i] & 0x3; // dibits
     int codeword = table[state][dibit];
     state = dibit; // next state = previous input
 
-    outBlock[i/2] |= codeword << (4 - (i*4) % 8);
+    outBlock[i] = codeword;
+  }
+}
+
+/* Encodes a packet of bits using the 3/4 rate encoder
+ * inBlock - 144 bits - 48 tribits
+ * outBlock - 196 bits - 48 pairs of dibits
+ */
+void trellis_3_4_encode(uint8_t * inBlock, uint8_t * outBlock)
+{
+  const uint8_t table[8][8] = {
+    { 0, 8, 4, 12, 2, 10, 6, 14 },
+    { 4, 12, 2, 10, 6, 14, 0, 8 },
+    { 1, 9, 5, 13, 3, 11, 7, 15 },
+    { 5, 13, 3, 11, 7, 15, 1, 9 },
+    { 3, 11, 7, 15, 1, 9, 5, 13 },
+    { 7, 15, 1, 9, 5, 13, 3, 11 },
+    { 2, 10, 6, 14, 0, 8, 4, 12 },
+    { 6, 14, 0, 8, 4, 12, 2, 10 }
+  };
+  int state = 0;
+
+  for(int i = 0; i < 25; i++) {
+    outBlock[i] = 0;
   }
 
-  cout << "inBlock --" << endl;
-  print_array(inBlock, 13);
-  cout << "outBlock -- " << endl;
-  print_array(outBlock, 25);
+  for(int i = 0; i < 48; i++) {
+    int dibit = inBlock[i] & 0x7; // tribits
+    int codeword = table[state][dibit];
+    state = dibit; // next state = previous input
+
+    outBlock[i] = codeword; // paris of dibits
+  }
 }
 
 
 /* Decodes 1/2 rate encoded bits using viterbi.
- * encoded - 196 bits of encoded data packed (25 bytes) - input
- * decoded - 98 bits of decoded data packed (13 bytes) - output
+ * encoded - 196 bits - 48 pairs of dibits
+ * decoded - 96 bits - 48 dibits
  */
 void viterbi_1_2_decode_copy(uint8_t * encoded, uint8_t * decoded)
 {
@@ -154,10 +182,7 @@ void viterbi_1_2_decode_copy(uint8_t * encoded, uint8_t * decoded)
   
   for (int i = 0; i < 192; i += 4)
   {
-    uint8_t codeword = (encoded[i/8] >> (4 - (i%8))) & 0xF; // select a 4 bit word
-    // cout << i/4 + 1 << ": ";
-    // print_4(codeword);
-    // cout << endl;
+    uint8_t codeword = encoded[i/4] & 0xF; // pairs of dibits
     int survivors[4] = {0};
     array<vector<int>, 4> nextState; // for storing the next state(s) of each current end points
     fill(nextState.begin(), nextState.end(), vector<int>(0));
@@ -168,14 +193,6 @@ void viterbi_1_2_decode_copy(uint8_t * encoded, uint8_t * decoded)
         path_distance[next] = count_bits_4(codeword ^ table[0][next]);
         survivors[next]++;
         nextState[next].push_back(next);
-
-        // cout << "first time " << next << " - ";
-        // cout << "distance from ";
-        // print_4(codeword);
-        // cout << " to ";
-        // print_4(table[0][next]);
-        // cout << " = " << path_distance[next] << endl;
-
       }
     } else {
       for (int next = 0; next < 4; next++) {
@@ -183,35 +200,13 @@ void viterbi_1_2_decode_copy(uint8_t * encoded, uint8_t * decoded)
           int prev = paths[path].getEnd();
           // total hamming distance to the next next
           dist[path] = count_bits_4(codeword ^ table[prev][next]) + paths[path].getDist(); 
-
-          // if (i < 8) {
-          //   cout << "next: " << next << ", prev: " << prev;
-          //   cout << " : dist from ";
-          //   print_4(codeword);
-          //   cout << " to ";
-          //   print_4(table[prev][next]);
-          //   cout << " = " << dist[prev] << endl;
-          // }
         }
         int path = find_min(dist, 4); // index of the next with the shortest distance to new next
         path_distance[next] = dist[path]; // store the distance for this path
         survivors[path]++;
         nextState[path].push_back(next);
-
-        // if (i < 8) { 
-        //   cout << "shortest distance to " << next << " from " 
-        //     << paths[path].getEnd() << " = " << path_distance[next] 
-        //     << " at index: " << path << endl;
-        // }
       }
     }
-
-    // if (i < 8) {
-    //   for (int i = 0; i < 4; i++) {
-    //     cout << i << ": " << survivors[i] << ", ";
-    //   }
-    //   cout << endl;
-    // }
 
     for (int path = 0; path < 4; path++) {
       int pathObjIndex = 0;
@@ -237,18 +232,12 @@ void viterbi_1_2_decode_copy(uint8_t * encoded, uint8_t * decoded)
           cerr << "ERROR: did not find path to copy into" << endl;
           break;
         }
-        // if (i < 8) {
-        //   cout << dest << " dies, to be replace by " << path << endl;
-        //   cout << "paths[" << dest << "] = " << paths[dest].toString() << endl;
-        // }
+
         paths[dest] = paths[path]; // copy the object
-        // if (i < 8) {
-        //   cout << "paths[" << dest << "].getDist() = " << paths[dest].toString() << endl;
-        // }
+
         survivors[dest]++; // we have copied into this one
         // insert the new data
         paths[dest].insert(destState, destDistance);
-        // if (i < 8) cout << dest << " - inserting " << destState << " at distance " << destDistance << endl;        
       }
 
       // now insert the original
@@ -257,12 +246,6 @@ void viterbi_1_2_decode_copy(uint8_t * encoded, uint8_t * decoded)
         paths[path].insert(output, path_distance[output]);
       }
     }
-
-    // if (i < 8) {
-    //   for (int i = 0; i < 4; i++) {
-    //     cout << paths[i].toString() << endl;
-    //   }
-    // }
   }
 
   // pick the path with the lowest distance
@@ -277,17 +260,13 @@ void viterbi_1_2_decode_copy(uint8_t * encoded, uint8_t * decoded)
 
   vector<int> path = paths[lowest_path].getPath();
   for (int i = 0; i < path.size(); i++) {
-    decoded[i / 4] |= path[i] << (6 - (i*2) % 8);
+    decoded[i] = path[i];
   }
-
-  // cout << "lowest_distance: " << lowest_distance << endl;
-  // cout << "decoded -- " << endl;
-  // print_array(decoded, 13);
 }
 
 /* Decodes 1/2 rate encoded bits using viterbi.
- * encoded - 196 bits of encoded data packed (25 bytes) - input
- * decoded - 98 bits of decoded data packed (13 bytes) - output
+ * encoded - 196 bits - 48 pairs of dibits
+ * decoded - 96 bits - 48 dibits
  */
 void viterbi_1_2_decode_mat(uint8_t * encoded, uint8_t * decoded)
 {
@@ -308,11 +287,7 @@ void viterbi_1_2_decode_mat(uint8_t * encoded, uint8_t * decoded)
   
   for (int i = 0; i < 192; i += 4)
   {
-    uint8_t codeword = (encoded[i/8] >> (4 - (i%8))) & 0xF; // select a 4 bit word
-    // cout << i/4 + 1 << ": ";
-    // print_4(codeword);
-    // cout << endl;
-    
+    uint8_t codeword = encoded[i/4] & 0xF;    
     int dist[4]; // distance from one point to the next 4 points
 
     if (i == 0) {
@@ -320,41 +295,16 @@ void viterbi_1_2_decode_mat(uint8_t * encoded, uint8_t * decoded)
         next_path_distance[next] = count_bits_4(codeword ^ table[0][next]);
 
         trace[0][next] = 0; // all points come from 0 at the start 
-
-        // cout << "first time " << next << " - ";
-        // cout << "distance from ";
-        // print_4(codeword);
-        // cout << " to ";
-        // print_4(table[0][next]);
-        // cout << " = " << next_path_distance[next] << endl;
-
       }
     } else {
       for (int next = 0; next < 4; next++) {
         for (int prev = 0; prev < 4; prev++) {
           // total hamming distance to the next next
           dist[prev] = count_bits_4(codeword ^ table[prev][next]) + path_distance[prev]; 
-
-          // if (i < 8) {
-          //   cout << "next: " << next << ", prev: " << prev;
-          //   cout << " : dist from ";
-          //   print_4(codeword);
-          //   cout << " to ";
-          //   print_4(table[prev][next]);
-          //   cout << " = " << dist[prev] << endl;
-          // }
         }
         int prev = find_min(dist, 4); // index of the next with the shortest distance to new next
         next_path_distance[next] = dist[prev]; // store the distance for this prev
         trace[i/4][next] = prev; // trace the previous position of this next point
-
-        // survivors[patprevh]++;
-        // nextState[path].push_back(next);
-
-        // if (i < 8) { 
-        //   cout << "shortest distance to " << next << " from " 
-        //     << prev << " = " << next_path_distance[next] << endl;
-        // }
       }
     }
     for (int i = 0; i < 4; i++) {
@@ -372,56 +322,148 @@ void viterbi_1_2_decode_mat(uint8_t * encoded, uint8_t * decoded)
     }
   }
 
-  // cout << "best_path: " << best_path << endl;
   int state = best_path;
   for (int i = 47; i >= 0; i--) {
-    decoded[i / 4] |= state << (6 - (i*2) % 8);
+    decoded[i] = state;
     state = trace[i][state];
   }
-
-  // cout << "lowest_distance: " << lowest_distance << endl;
-  // cout << "decoded -- " << endl;
-  // print_array(decoded, 13);
 }
 
-void viterbi_1_2_decode_copy_10000(uint8_t * encoded, uint8_t * decoded) {
-  for (int i = 0; i < 10000; i++) {
-    viterbi_1_2_decode_copy(encoded, decoded);
+/* Decodes 3/4 rate encoded bits using viterbi.
+ * encoded - 196 bits - 48 pairs of dibits
+ * decoded - 144 bits - 48 tribits
+ */
+void viterbi_3_4_decode_mat(uint8_t * encoded, uint8_t * decoded)
+{
+  const uint8_t table[8][8] = {
+    { 0, 8, 4, 12, 2, 10, 6, 14 },
+    { 4, 12, 2, 10, 6, 14, 0, 8 },
+    { 1, 9, 5, 13, 3, 11, 7, 15 },
+    { 5, 13, 3, 11, 7, 15, 1, 9 },
+    { 3, 11, 7, 15, 1, 9, 5, 13 },
+    { 7, 15, 1, 9, 5, 13, 3, 11 },
+    { 2, 10, 6, 14, 0, 8, 4, 12 },
+    { 6, 14, 0, 8, 4, 12, 2, 10 }
+  };
+  // this matrix is for building the paths.  Each point will be populated 
+  // with the previous state at that point
+  int trace[48][8]; // trace of previous points
+
+  int path_distance[8];
+  for (int path = 0; path < 8; path++) path_distance[path] = 0;
+
+  int next_path_distance[8];
+  
+  for (int i = 0; i < 192; i += 4)
+  {
+    uint8_t codeword = encoded[i/4] & 0xF;
+    int dist[8]; // distance from one point to the next 4 points
+
+    if (i == 0) {
+      for (int next = 0; next < 8; next++) {
+        next_path_distance[next] = count_bits_4(codeword ^ table[0][next]);
+
+        trace[0][next] = 0; // all points come from 0 at the start 
+      }
+    } else {
+      for (int next = 0; next < 8; next++) {
+        for (int prev = 0; prev < 8; prev++) {
+          // total hamming distance to the next next
+          dist[prev] = count_bits_4(codeword ^ table[prev][next]) + path_distance[prev]; 
+        }
+        int prev = find_min(dist, 8); // index of the next with the shortest distance to new next
+        next_path_distance[next] = dist[prev]; // store the distance for this prev
+        trace[i/4][next] = prev; // trace the previous position of this next point
+      }
+    }
+    for (int i = 0; i < 8; i++) {
+      path_distance[i] = next_path_distance[i];
+    }
+  }    
+
+  // pick the path with the lowest distance
+  int lowest_distance = path_distance[0];
+  int best_path = 0;
+  for (int i = 1; i < 8; i++) {
+    if (path_distance[i] < lowest_distance) {
+      lowest_distance = path_distance[i];
+      best_path = i;
+    }
   }
-}
 
-void viterbi_1_2_decode_mat_10000(uint8_t * encoded, uint8_t * decoded) {
-  for (int i = 0; i < 10000; i++) {
-    viterbi_1_2_decode_mat(encoded, decoded);
+  int state = best_path;
+  for (int i = 47; i >= 0; i--) {
+    decoded[i] = state;
+    state = trace[i][state];
   }
 }
 
 int main() {
-  uint8_t inBlock[13];
-  uint8_t outBlock[25];
-  uint8_t decoded_copy[13];
-  uint8_t decoded_mat[13];
+  uint8_t inBlock[48];
+  uint8_t outBlock[48];
+  uint8_t decoded[48];
+  bool testPass;
 
-  for(int i = 0; i < 13; i++) {
-    inBlock[i] = i;
-    decoded_copy[i] = 0;
-    decoded_mat[i] = 0;
+  cout << "1/2 rate encoding and decoding ********************  ";
+
+  for(int i = 0; i < 48; i++) {
+    inBlock[i] = i % 4;
+    decoded[i] = 0;
   }
   inBlock[12] = 0;
 
   trellis_1_2_encode(inBlock, outBlock);
-  viterbi_1_2_decode_copy_10000(outBlock, decoded_copy);
-  viterbi_1_2_decode_mat_10000(outBlock, decoded_mat);
+  viterbi_1_2_decode_mat(outBlock, decoded);
 
-  cout << "inBlock --" << endl;
-  print_array(inBlock, 13);
-  cout << "encoded -- " << endl;
-  print_array(outBlock, 25);
+  testPass = true;
+  for(int i = 0; i < 48; i++) {
+    if(inBlock[i] != decoded[i]) {
+      testPass = false;
+      break;
+    }
+  }
 
-  cout << "decoded_copy -- " << endl;
-  print_array(decoded_copy, 13);
-  cout << "decoded_mat -- " << endl;
-  print_array(decoded_mat, 13);
+  if(!testPass) {
+    cout << "FAIL!" << endl;
+    cout << "inBlock --" << endl;
+    print_array(inBlock, 48);
+    cout << "encoded -- " << endl;
+    print_array(outBlock, 48);
+    cout << "decoded -- " << endl;
+    print_array(decoded, 48);
+  } else {
+    cout << "Pass" << endl;
+  }
+
+  cout << "3/4 rate encoding and decoding ********************  ";
+
+  for (int i = 0; i < 48; i++) {
+    inBlock[i] = i % 8; // tribits
+    decoded[i] = 0;
+  }
+
+  trellis_3_4_encode(inBlock, outBlock);
+  viterbi_3_4_decode_mat(outBlock, decoded);
+
+  testPass = true;
+  for(int i = 0; i < 48; i++) {
+    if(inBlock[i] != decoded[i]) {
+      testPass = false;
+      break;
+    }
+  }
+
+  if(!testPass) {
+    cout << "FAIL!" << endl;
+    cout << "inBlock --" << endl;
+    print_array(inBlock, 48);
+    cout << "encoded -- " << endl;
+    print_array(outBlock, 48);
+    cout << "decoded -- " << endl;
+    print_array(decoded, 48);
+  } else {
+    cout << "Pass" << endl;
+  }
 
   return 0;
 }
