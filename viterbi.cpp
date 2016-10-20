@@ -143,10 +143,10 @@ void print_array(float * list, int len)
 void trellis_1_2_encode(uint8_t * inBlock, uint8_t * outBlock)
 {
   const uint8_t table[4][4] = {
-    {0x0, 0xF, 0xC, 0x3},
-    {0x4, 0xB, 0x8, 0x7},
-    {0xD, 0x2, 0x1, 0xE},
-    {0x9, 0x6, 0x5, 0xA}
+    {0b0010, 0b1100, 0b0001, 0b1111},
+    {0b1110, 0b0000, 0b1101, 0b0011},
+    {0b1001, 0b0111, 0b1010, 0b0100},
+    {0b0101, 0b1011, 0b0110, 0b1000}
   };
   int state = 0;
 
@@ -170,14 +170,14 @@ void trellis_1_2_encode(uint8_t * inBlock, uint8_t * outBlock)
 void trellis_3_4_encode(uint8_t * inBlock, uint8_t * outBlock)
 {
   const uint8_t table[8][8] = {
-    { 0, 8, 4, 12, 2, 10, 6, 14 },
-    { 4, 12, 2, 10, 6, 14, 0, 8 },
-    { 1, 9, 5, 13, 3, 11, 7, 15 },
-    { 5, 13, 3, 11, 7, 15, 1, 9 },
-    { 3, 11, 7, 15, 1, 9, 5, 13 },
-    { 7, 15, 1, 9, 5, 13, 3, 11 },
-    { 2, 10, 6, 14, 0, 8, 4, 12 },
-    { 6, 14, 0, 8, 4, 12, 2, 10 }
+    { 0b0010, 0b1101, 0b1110, 0b0001, 0b0111, 0b1000, 0b1011, 0b0100 },
+    { 0b1110, 0b0001, 0b0111, 0b1000, 0b1011, 0b0100, 0b0010, 0b1101 },
+    { 0b1010, 0b0101, 0b0110, 0b1001, 0b1111, 0b0000, 0b0011, 0b1100 },
+    { 0b0110, 0b1001, 0b1111, 0b0000, 0b0011, 0b1100, 0b1010, 0b0101 },
+    { 0b1111, 0b0000, 0b0011, 0b1100, 0b1010, 0b0101, 0b0110, 0b1001 },
+    { 0b0011, 0b1100, 0b1010, 0b0101, 0b0110, 0b1001, 0b1111, 0b0000 },
+    { 0b0111, 0b1000, 0b1011, 0b0100, 0b0010, 0b1101, 0b1110, 0b0001 },
+    { 0b1011, 0b0100, 0b0010, 0b1101, 0b1110, 0b0001, 0b0111, 0b1000 }
   };
   int state = 0;
 
@@ -201,10 +201,10 @@ void trellis_3_4_encode(uint8_t * inBlock, uint8_t * outBlock)
 int viterbi_1_2_decode(uint8_t * encoded, uint8_t * decoded)
 {
   const uint8_t table[4][4] = {
-    {0x0, 0xF, 0xC, 0x3},
-    {0x4, 0xB, 0x8, 0x7},
-    {0xD, 0x2, 0x1, 0xE},
-    {0x9, 0x6, 0x5, 0xA}
+    {0b0010, 0b1100, 0b0001, 0b1111},
+    {0b1110, 0b0000, 0b1101, 0b0011},
+    {0b1001, 0b0111, 0b1010, 0b0100},
+    {0b0101, 0b1011, 0b0110, 0b1000}
   };
   // this matrix is for building the paths.  Each point will be populated 
   // with the previous state at that point
@@ -296,14 +296,14 @@ int viterbi_1_2_decode(uint8_t * encoded, uint8_t * decoded)
 int viterbi_3_4_decode(uint8_t * encoded, uint8_t * decoded)
 {
   const uint8_t table[8][8] = {
-    { 0x0, 0x8, 0x4, 0xC, 0x2, 0xA, 0x6, 0xE },
-    { 0x4, 0xC, 0x2, 0xA, 0x6, 0xE, 0x0, 0x8 },
-    { 0x1, 0x9, 0x5, 0xD, 0x3, 0xB, 0x7, 0xF },
-    { 0x5, 0xD, 0x3, 0xB, 0x7, 0xF, 0x1, 0x9 },
-    { 0x3, 0xB, 0x7, 0xF, 0x1, 0x9, 0x5, 0xD },
-    { 0x7, 0xF, 0x1, 0x9, 0x5, 0xD, 0x3, 0xB },
-    { 0x2, 0xA, 0x6, 0xE, 0x0, 0x8, 0x4, 0xC },
-    { 0x6, 0xE, 0x0, 0x8, 0x4, 0xC, 0x2, 0xA }
+    { 0b0010, 0b1101, 0b1110, 0b0001, 0b0111, 0b1000, 0b1011, 0b0100 },
+    { 0b1110, 0b0001, 0b0111, 0b1000, 0b1011, 0b0100, 0b0010, 0b1101 },
+    { 0b1010, 0b0101, 0b0110, 0b1001, 0b1111, 0b0000, 0b0011, 0b1100 },
+    { 0b0110, 0b1001, 0b1111, 0b0000, 0b0011, 0b1100, 0b1010, 0b0101 },
+    { 0b1111, 0b0000, 0b0011, 0b1100, 0b1010, 0b0101, 0b0110, 0b1001 },
+    { 0b0011, 0b1100, 0b1010, 0b0101, 0b0110, 0b1001, 0b1111, 0b0000 },
+    { 0b0111, 0b1000, 0b1011, 0b0100, 0b0010, 0b1101, 0b1110, 0b0001 },
+    { 0b1011, 0b0100, 0b0010, 0b1101, 0b1110, 0b0001, 0b0111, 0b1000 }
   };
   // this matrix is for building the paths.  Each point will be populated 
   // with the previous state at that point
@@ -398,10 +398,10 @@ int viterbi_3_4_decode(uint8_t * encoded, uint8_t * decoded)
 int viterbi_1_2_decode(float * encoded, uint8_t * hard_encoded, uint8_t * decoded)
 {
   const uint8_t table[4][4] = {
-    {0x0, 0xF, 0xC, 0x3},
-    {0x4, 0xB, 0x8, 0x7},
-    {0xD, 0x2, 0x1, 0xE},
-    {0x9, 0x6, 0x5, 0xA}
+    {0b0010, 0b1100, 0b0001, 0b1111},
+    {0b1110, 0b0000, 0b1101, 0b0011},
+    {0b1001, 0b0111, 0b1010, 0b0100},
+    {0b0101, 0b1011, 0b0110, 0b1000}
   };
 
   // this matrix is for building the paths.  Each point will be populated 
@@ -488,14 +488,14 @@ int viterbi_1_2_decode(float * encoded, uint8_t * hard_encoded, uint8_t * decode
 int viterbi_3_4_decode(float * encoded, uint8_t * hard_encoded, uint8_t * decoded)
 {
   const uint8_t table[8][8] = {
-    { 0x0, 0x8, 0x4, 0xC, 0x2, 0xA, 0x6, 0xE },
-    { 0x4, 0xC, 0x2, 0xA, 0x6, 0xE, 0x0, 0x8 },
-    { 0x1, 0x9, 0x5, 0xD, 0x3, 0xB, 0x7, 0xF },
-    { 0x5, 0xD, 0x3, 0xB, 0x7, 0xF, 0x1, 0x9 },
-    { 0x3, 0xB, 0x7, 0xF, 0x1, 0x9, 0x5, 0xD },
-    { 0x7, 0xF, 0x1, 0x9, 0x5, 0xD, 0x3, 0xB },
-    { 0x2, 0xA, 0x6, 0xE, 0x0, 0x8, 0x4, 0xC },
-    { 0x6, 0xE, 0x0, 0x8, 0x4, 0xC, 0x2, 0xA }
+    { 0b0010, 0b1101, 0b1110, 0b0001, 0b0111, 0b1000, 0b1011, 0b0100 },
+    { 0b1110, 0b0001, 0b0111, 0b1000, 0b1011, 0b0100, 0b0010, 0b1101 },
+    { 0b1010, 0b0101, 0b0110, 0b1001, 0b1111, 0b0000, 0b0011, 0b1100 },
+    { 0b0110, 0b1001, 0b1111, 0b0000, 0b0011, 0b1100, 0b1010, 0b0101 },
+    { 0b1111, 0b0000, 0b0011, 0b1100, 0b1010, 0b0101, 0b0110, 0b1001 },
+    { 0b0011, 0b1100, 0b1010, 0b0101, 0b0110, 0b1001, 0b1111, 0b0000 },
+    { 0b0111, 0b1000, 0b1011, 0b0100, 0b0010, 0b1101, 0b1110, 0b0001 },
+    { 0b1011, 0b0100, 0b0010, 0b1101, 0b1110, 0b0001, 0b0111, 0b1000 }
   };
   // this matrix is for building the paths.  Each point will be populated 
   // with the previous state at that point
@@ -727,7 +727,7 @@ int main() {
   fstream fs;
   fs.open("test_1_2.csv");
   fs << "stddev, reported hard errors, reported soft errors, hard errors, soft errors, hard ber, soft ber" << endl;
-  for(int i = 0; i < 100; i++) {
+  for(int i = 0; i < 200; i++) {
     stddev = 0.01 * i;
 
     zero(hardbits, 48);
@@ -777,7 +777,7 @@ int main() {
 
   fs.open("test_3_4.csv");
   fs << "stddev, reported hard errors, reported soft errors, hard errors, soft errors, hard ber, soft ber" << endl;
-  for(int i = 0; i < 100; i++) {
+  for(int i = 0; i < 200; i++) {
     stddev = 0.01 * i;
 
     zero(hardbits, 48);
@@ -812,7 +812,6 @@ int main() {
     if(hardErrors == 144 && softErrors == 144) {
       break;
     }
-
   }
 
   fs.close();

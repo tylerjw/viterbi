@@ -16,3 +16,22 @@ Generic viterbi implementation based on P25 Air interface
  The FSM used in this particular implementation has the special property of having the current input as the next state.
 
  For each dibit input, there is a corresponding output constellation point which is represented as a dibit pair (4-bit word).
+
+On page 34 of BAAA-A of the P25 spec there is this table that corrisponds dibit pairs to these values.  This table was used to traslate the above table gotten from page 33 of the same document.
+
+0 0b0010
+1 0b1010
+2 0b0111
+3 0b1111
+4 0b1110
+5 0b0110
+6 0b1011
+7 0b0011
+8 0b1101
+9 0b0101
+10 0b1000
+11 0b0000
+12 0b0001
+13 0b1001
+14 0b0100
+15 0b1100
