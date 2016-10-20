@@ -267,14 +267,14 @@ void viterbi_1_2_decode(uint8_t * encoded, uint8_t * decoded)
 void viterbi_3_4_decode(uint8_t * encoded, uint8_t * decoded)
 {
   const uint8_t table[8][8] = {
-    { 0, 8, 4, 12, 2, 10, 6, 14 },
-    { 4, 12, 2, 10, 6, 14, 0, 8 },
-    { 1, 9, 5, 13, 3, 11, 7, 15 },
-    { 5, 13, 3, 11, 7, 15, 1, 9 },
-    { 3, 11, 7, 15, 1, 9, 5, 13 },
-    { 7, 15, 1, 9, 5, 13, 3, 11 },
-    { 2, 10, 6, 14, 0, 8, 4, 12 },
-    { 6, 14, 0, 8, 4, 12, 2, 10 }
+    { 0x0, 0x8, 0x4, 0xC, 0x2, 0xA, 0x6, 0xE },
+    { 0x4, 0xC, 0x2, 0xA, 0x6, 0xE, 0x0, 0x8 },
+    { 0x1, 0x9, 0x5, 0xD, 0x3, 0xB, 0x7, 0xF },
+    { 0x5, 0xD, 0x3, 0xB, 0x7, 0xF, 0x1, 0x9 },
+    { 0x3, 0xB, 0x7, 0xF, 0x1, 0x9, 0x5, 0xD },
+    { 0x7, 0xF, 0x1, 0x9, 0x5, 0xD, 0x3, 0xB },
+    { 0x2, 0xA, 0x6, 0xE, 0x0, 0x8, 0x4, 0xC },
+    { 0x6, 0xE, 0x0, 0x8, 0x4, 0xC, 0x2, 0xA }
   };
   // this matrix is for building the paths.  Each point will be populated 
   // with the previous state at that point
@@ -424,13 +424,13 @@ void viterbi_3_4_decode(float * encoded, uint8_t * decoded)
   int trace[48][8]; // trace of previous points
 
   float path_distance[8];
-  for (int path = 0; path < 8; path++) path_distance[path] = 0.0;
+  for (int path = 0; path < 8; path++) path_distance[path] = 0;
 
   float next_path_distance[8];
   
   for (int i = 0; i < 192; i += 4)
   {
-    float * codewordPtr = &encoded[i];
+    float * codewordPtr = &encoded[i]; // is a float now    
     float dist[8]; // distance from one point to the next 4 points
 
     if (i == 0) {
@@ -443,18 +443,13 @@ void viterbi_3_4_decode(float * encoded, uint8_t * decoded)
       for (int next = 0; next < 8; next++) {
         for (int prev = 0; prev < 8; prev++) {
           // total hamming distance to the next next
-          dist[prev] = distance(table[0][next], codewordPtr) + path_distance[prev]; 
+          dist[prev] = distance(table[prev][next], codewordPtr) + path_distance[prev]; 
         }
         int prev = find_min(dist, 8); // index of the next with the shortest distance to new next
         next_path_distance[next] = dist[prev]; // store the distance for this prev
         trace[i/4][next] = prev; // trace the previous position of this next point
       }
     }
-    cout << i << "\t";
-    for(int j = 0; j < 7; j++) {
-      cout << trace[i/4][j] << "(" << next_path_distance[j] << ") , ";
-    }
-    cout << trace[i/4][7] << "(" << next_path_distance[7] << ")" << endl;
     for (int j = 0; j < 8; j++) {
       path_distance[j] = next_path_distance[j];
     }
@@ -463,9 +458,9 @@ void viterbi_3_4_decode(float * encoded, uint8_t * decoded)
   // pick the path with the lowest distance
   float lowest_distance = path_distance[0];
   int best_path = 0;
-  cout << "3/4 soft, path_distance[0]: " << path_distance[0] << endl;
+  cout << "1/2 soft, path_distance[0]: " << path_distance[0] << endl;
   for (int i = 1; i < 8; i++) {
-    cout << "distance[" << i << "]: " << path_distance[i] << endl;
+    cout << "lowest: " << lowest_distance << ", distance[" << i << "]: " << path_distance[i] << endl;
     if (path_distance[i] < lowest_distance) {
       lowest_distance = path_distance[i];
       best_path = i;
