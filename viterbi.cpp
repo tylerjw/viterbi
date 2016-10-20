@@ -20,6 +20,15 @@ void trellis_1_2_encode(uint8_t * inBlock, uint8_t * outBlock);
 void viterbi_1_2_decode(uint8_t * encoded, uint8_t * decoded);
 void viterbi_1_2_decode(float * encoded, uint8_t * decoded);
 void viterbi_3_4_decode(uint8_t * encoded, uint8_t * decoded);
+void viterbi_3_4_decode(float * encoded, uint8_t * decoded);
+
+// routines for testing
+void bits_to_symbols(uint8_t * dibitpairs, int len, float * symbols);
+void symbols_to_bits(float * symbols, int len, uint8_t * dibitpairs, float * softbits);
+void noisy_channel(float * symbols, int len, float stddev);
+void zero(uint8_t * list, int len);
+int test_1_2(uint8_t * expected, uint8_t * result, int len);
+int test_3_4(uint8_t * expected, uint8_t * result, int len);
 
 // do not use for values > 16
 int count_bits_4(uint8_t n)
@@ -227,15 +236,17 @@ void viterbi_1_2_decode(uint8_t * encoded, uint8_t * decoded)
         trace[i/4][next] = prev; // trace the previous position of this next point
       }
     }
-    for (int i = 0; i < 4; i++) {
-      path_distance[i] = next_path_distance[i];
+    for (int j = 0; j < 4; j++) {
+      path_distance[j] = next_path_distance[j];
     }
   }    
 
   // pick the path with the lowest distance
   int lowest_distance = path_distance[0];
   int best_path = 0;
+  cout << "1/2 hard, path_distance[0]: " << path_distance[0] << endl;
   for (int i = 1; i < 4; i++) {
+    cout << "lowest: " << lowest_distance << ", distance[" << i << "]: " << path_distance[i] << endl;
     if (path_distance[i] < lowest_distance) {
       lowest_distance = path_distance[i];
       best_path = i;
@@ -296,15 +307,22 @@ void viterbi_3_4_decode(uint8_t * encoded, uint8_t * decoded)
         trace[i/4][next] = prev; // trace the previous position of this next point
       }
     }
-    for (int i = 0; i < 8; i++) {
-      path_distance[i] = next_path_distance[i];
+    cout << i << "\t";
+    for(int j = 0; j < 7; j++) {
+      cout << trace[i/4][j] << "(" << next_path_distance[j] << ") , ";
+    }
+    cout << trace[i/4][7] << "(" << next_path_distance[7] << ")" << endl;
+    for (int j = 0; j < 8; j++) {
+      path_distance[j] = next_path_distance[j];
     }
   }    
 
   // pick the path with the lowest distance
   int lowest_distance = path_distance[0];
   int best_path = 0;
+  cout << "3/4 hard, path_distance[0]: " << path_distance[0] << endl;
   for (int i = 1; i < 8; i++) {
+    cout << "lowest: " << lowest_distance << ", distance[" << i << "]: " << path_distance[i] << endl;
     if (path_distance[i] < lowest_distance) {
       lowest_distance = path_distance[i];
       best_path = i;
@@ -361,15 +379,17 @@ void viterbi_1_2_decode(float * encoded, uint8_t * decoded)
         trace[i/4][next] = prev; // trace the previous position of this next point
       }
     }
-    for (int i = 0; i < 4; i++) {
-      path_distance[i] = next_path_distance[i];
+    for (int j = 0; j < 4; j++) {
+      path_distance[j] = next_path_distance[j];
     }
   }    
 
   // pick the path with the lowest distance
   float lowest_distance = path_distance[0];
   int best_path = 0;
+  cout << "1/2 soft, path_distance[0]: " << path_distance[0] << endl;
   for (int i = 1; i < 4; i++) {
+    cout << "lowest: " << lowest_distance << ", distance[" << i << "]: " << path_distance[i] << endl;
     if (path_distance[i] < lowest_distance) {
       lowest_distance = path_distance[i];
       best_path = i;
@@ -383,13 +403,79 @@ void viterbi_1_2_decode(float * encoded, uint8_t * decoded)
   }
 }
 
-void hard_to_soft(uint8_t * hard, float * soft)
+/* Decodes 3/4 rate encoded bits using viterbi.
+ * encoded - 196 bits - 48 pairs of dibits
+ * decoded - 144 bits - 48 tribits
+ */
+void viterbi_3_4_decode(float * encoded, uint8_t * decoded)
 {
-  for(int i = 0; i < 48; i++) {
-    uint8_t mask = 0x8;
-    for(int j = 0; j < 4; mask >>= 1, j++) {
-      soft[4*i + j] = (hard[i]&mask) ? 127.0 : -127.0;
+  const uint8_t table[8][8] = {
+    { 0x0, 0x8, 0x4, 0xC, 0x2, 0xA, 0x6, 0xE },
+    { 0x4, 0xC, 0x2, 0xA, 0x6, 0xE, 0x0, 0x8 },
+    { 0x1, 0x9, 0x5, 0xD, 0x3, 0xB, 0x7, 0xF },
+    { 0x5, 0xD, 0x3, 0xB, 0x7, 0xF, 0x1, 0x9 },
+    { 0x3, 0xB, 0x7, 0xF, 0x1, 0x9, 0x5, 0xD },
+    { 0x7, 0xF, 0x1, 0x9, 0x5, 0xD, 0x3, 0xB },
+    { 0x2, 0xA, 0x6, 0xE, 0x0, 0x8, 0x4, 0xC },
+    { 0x6, 0xE, 0x0, 0x8, 0x4, 0xC, 0x2, 0xA }
+  };
+  // this matrix is for building the paths.  Each point will be populated 
+  // with the previous state at that point
+  int trace[48][8]; // trace of previous points
+
+  float path_distance[8];
+  for (int path = 0; path < 8; path++) path_distance[path] = 0.0;
+
+  float next_path_distance[8];
+  
+  for (int i = 0; i < 192; i += 4)
+  {
+    float * codewordPtr = &encoded[i];
+    float dist[8]; // distance from one point to the next 4 points
+
+    if (i == 0) {
+      for (int next = 0; next < 8; next++) {
+        next_path_distance[next] = distance(table[0][next], codewordPtr);
+
+        trace[0][next] = 0; // all points come from 0 at the start 
+      }
+    } else {
+      for (int next = 0; next < 8; next++) {
+        for (int prev = 0; prev < 8; prev++) {
+          // total hamming distance to the next next
+          dist[prev] = distance(table[0][next], codewordPtr) + path_distance[prev]; 
+        }
+        int prev = find_min(dist, 8); // index of the next with the shortest distance to new next
+        next_path_distance[next] = dist[prev]; // store the distance for this prev
+        trace[i/4][next] = prev; // trace the previous position of this next point
+      }
     }
+    cout << i << "\t";
+    for(int j = 0; j < 7; j++) {
+      cout << trace[i/4][j] << "(" << next_path_distance[j] << ") , ";
+    }
+    cout << trace[i/4][7] << "(" << next_path_distance[7] << ")" << endl;
+    for (int j = 0; j < 8; j++) {
+      path_distance[j] = next_path_distance[j];
+    }
+  }    
+
+  // pick the path with the lowest distance
+  float lowest_distance = path_distance[0];
+  int best_path = 0;
+  cout << "3/4 soft, path_distance[0]: " << path_distance[0] << endl;
+  for (int i = 1; i < 8; i++) {
+    cout << "distance[" << i << "]: " << path_distance[i] << endl;
+    if (path_distance[i] < lowest_distance) {
+      lowest_distance = path_distance[i];
+      best_path = i;
+    }
+  }
+
+  int state = best_path;
+  for (int i = 47; i >= 0; i--) {
+    decoded[i] = state;
+    state = trace[i][state];
   }
 }
 
@@ -480,9 +566,25 @@ void zero(uint8_t * list, int len) {
   }
 }
 
-int test(uint8_t * expected, uint8_t * result, int len) {
+int test_1_2(uint8_t * expected, uint8_t * result, int len) {
   int errors = 0;
   for (int i = 0; i < len; i++) {
+    if ((result[i]&0x2) != (expected[i]&0x2)) {
+      errors++;
+    }
+    if ((result[i]&0x1) != (expected[i]&0x1)) {
+      errors++;
+    }
+  }
+  return errors;
+}
+
+int test_3_4(uint8_t * expected, uint8_t * result, int len) {
+  int errors = 0;
+  for (int i = 0; i < len; i++) {
+    if ((result[i]&0x4) != (expected[i]&0x4)) {
+      errors++;
+    }
     if ((result[i]&0x2) != (expected[i]&0x2)) {
       errors++;
     }
@@ -505,22 +607,21 @@ int main() {
   float softbits[192];
   uint8_t decoded_hard[48];
   uint8_t decoded_soft[48];
-  int hardDecodeErrors, softDecodeErrors;
-  float hardBer[100];
-  float softBer[100];
-  float stddev[100];
+  int hardErrors, softErrors;
+  float hardBer;
+  float softBer;
+  float stddev;
 
   for(int i = 0; i < 48; i++) {
     inBlock[i] = i % 4;
   }
-  inBlock[12] = 0;
 
   trellis_1_2_encode(inBlock, outBlock);
 
   cout << "1/2 rate decoding test ***********" << endl;
   cout << "stddev, hard errors, soft errors, hard ber, soft ber" << endl;
-  for(int i = 0; i < 100; i++) {
-    stddev[i] = 0.1 * i;
+  for(int i = 0; i < 1; i++) {
+    stddev = 0.1 * i;
 
     zero(hardbits, 48);
     zero(decoded_hard, 48);
@@ -528,29 +629,79 @@ int main() {
 
     bits_to_symbols(outBlock, 48, symbols);
 
-    noisy_channel(symbols, 96, stddev[i]);
+    // noisy_channel(symbols, 96, stddev);
 
     symbols_to_bits(symbols, 96, hardbits, softbits);
 
     viterbi_1_2_decode(hardbits, decoded_hard);
     viterbi_1_2_decode(softbits, decoded_soft);
 
-    hardDecodeErrors = test(inBlock, decoded_hard, 48);
-    softDecodeErrors = test(inBlock, decoded_soft, 48);
+    hardErrors = test_1_2(inBlock, decoded_hard, 48);
+    softErrors = test_1_2(inBlock, decoded_soft, 48);
 
-    hardBer[i] = (float)hardDecodeErrors / 96.0;
-    softBer[i] = (float)softDecodeErrors / 96.0;
+    hardBer = (float)hardErrors / 96.0;
+    softBer = (float)softErrors / 96.0;
 
     // cout << "hard decode, stddev: " << stddev << ", errors: " 
-    //   << hardDecodeErrors << "/96 bits, ber: " << hardBer[i] << endl;
+    //   << hardErrors << "/96 bits, ber: " << hardBer << endl;
     // cout << "soft decode, stddev: " << stddev << ", errors: " 
-    //   << softDecodeErrors << "/96 bits, ber: " << softBer[i] << endl;
+    //   << softErrors << "/96 bits, ber: " << softBer << endl;
 
-    cout << stddev[i] << ", " << hardDecodeErrors << ", " 
-     << softDecodeErrors << ", " << hardBer[i] << ", "
-     << softBer[i] << endl; 
+    cout << stddev << ", " << hardErrors << ", " 
+     << softErrors << ", " << hardBer << ", "
+     << softBer << endl; 
 
-    if(hardDecodeErrors == 96 && softDecodeErrors == 96) {
+    if(hardErrors == 96 && softErrors == 96) {
+      break;
+    }
+
+  }
+
+  for(int i = 0; i < 48; i++) {
+    inBlock[i] = i % 8; // tribits
+  }
+
+  trellis_3_4_encode(inBlock, outBlock);
+
+  cout << "3/4 rate decoding test ***********" << endl;
+  cout << "stddev, hard errors, soft errors, hard ber, soft ber" << endl;
+  for(int i = 0; i < 1; i++) {
+    stddev = 0.1 * i;
+
+    zero(hardbits, 48);
+    zero(decoded_hard, 48);
+    zero(decoded_soft, 48);
+
+    bits_to_symbols(outBlock, 48, symbols);
+
+    // noisy_channel(symbols, 96, stddev);
+
+    symbols_to_bits(symbols, 96, hardbits, softbits);
+
+    viterbi_3_4_decode(hardbits, decoded_hard);
+    viterbi_3_4_decode(softbits, decoded_soft);
+
+    cout << "inBlock" << endl;
+    print_array(inBlock, 48);
+    cout << "decoded_soft" << endl;
+    print_array(decoded_soft, 48);
+
+    hardErrors = test_3_4(inBlock, decoded_hard, 48);
+    softErrors = test_3_4(inBlock, decoded_soft, 48);
+
+    hardBer = (float)hardErrors / 144.0;
+    softBer = (float)softErrors / 144.0;
+
+    cout << "hard decode, stddev: " << stddev << ", errors: " 
+      << hardErrors << "/144 bits, ber: " << hardBer << endl;
+    cout << "soft decode, stddev: " << stddev << ", errors: " 
+      << softErrors << "/144 bits, ber: " << softBer << endl;
+
+    // cout << stddev << ", " << hardErrors << ", " 
+    //  << softErrors << ", " << hardBer << ", "
+    //  << softBer << endl; 
+
+    if(hardErrors == 144 && softErrors == 144) {
       break;
     }
 
