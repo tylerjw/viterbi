@@ -5,6 +5,7 @@
 #include <cmath>
 #include <cstdlib>
 #include <random>
+#include <fstream>
 
 using namespace std;
 
@@ -17,10 +18,10 @@ void print_4(uint8_t byte);
 void print_array(uint8_t * bytes, int len);
 void print_array(float * list, int len);
 void trellis_1_2_encode(uint8_t * inBlock, uint8_t * outBlock);
-void viterbi_1_2_decode(uint8_t * encoded, uint8_t * decoded);
-void viterbi_1_2_decode(float * encoded, uint8_t * decoded);
-void viterbi_3_4_decode(uint8_t * encoded, uint8_t * decoded);
-void viterbi_3_4_decode(float * encoded, uint8_t * decoded);
+int viterbi_1_2_decode(uint8_t * encoded, uint8_t * decoded);
+int viterbi_1_2_decode(float * encoded, uint8_t * hard_encoded, uint8_t * decoded);
+int viterbi_3_4_decode(uint8_t * encoded, uint8_t * decoded);
+int viterbi_3_4_decode(float * encoded, uint8_t * hard_encoded, uint8_t * decoded);
 
 // routines for testing
 void bits_to_symbols(uint8_t * dibitpairs, int len, float * symbols);
@@ -197,7 +198,7 @@ void trellis_3_4_encode(uint8_t * inBlock, uint8_t * outBlock)
  * encoded - 196 bits - 48 pairs of dibits
  * decoded - 96 bits - 48 dibits
  */
-void viterbi_1_2_decode(uint8_t * encoded, uint8_t * decoded)
+int viterbi_1_2_decode(uint8_t * encoded, uint8_t * decoded)
 {
   const uint8_t table[4][4] = {
     {0x0, 0xF, 0xC, 0x3},
@@ -208,6 +209,9 @@ void viterbi_1_2_decode(uint8_t * encoded, uint8_t * decoded)
   // this matrix is for building the paths.  Each point will be populated 
   // with the previous state at that point
   int trace[48][4]; // trace of previous points
+
+  uint8_t hard_decoded[49];
+  hard_decoded[0] = 0;
 
   int path_distance[4];
   for (int path = 0; path < 4; path++) path_distance[path] = 0;
@@ -219,6 +223,23 @@ void viterbi_1_2_decode(uint8_t * encoded, uint8_t * decoded)
     uint8_t codeword = encoded[i/4] & 0xF;    
     int dist[4]; // distance from one point to the next 4 points
 
+    uint8_t hard_codeword = encoded[i/4] & 0xF;
+    int k = i/4;
+    int min_dist = count_bits_4(hard_codeword ^ table[hard_decoded[k]][0]);
+    if(min_dist) {
+      for(int l = 1; l < 4; l++) {
+        int dist = count_bits_4(hard_codeword ^ table[hard_decoded[k]][l]);
+        if (dist < min_dist) {
+          min_dist = dist;
+          hard_decoded[k+1] = l;
+        }
+        if(!min_dist)
+          break;
+      }
+    } else {
+      hard_decoded[k+1] = 0;
+    }
+
     if (i == 0) {
       for (int next = 0; next < 4; next++) {
         next_path_distance[next] = count_bits_4(codeword ^ table[0][next]);
@@ -244,27 +265,35 @@ void viterbi_1_2_decode(uint8_t * encoded, uint8_t * decoded)
   // pick the path with the lowest distance
   int lowest_distance = path_distance[0];
   int best_path = 0;
-  cout << "1/2 hard, path_distance[0]: " << path_distance[0] << endl;
   for (int i = 1; i < 4; i++) {
-    cout << "lowest: " << lowest_distance << ", distance[" << i << "]: " << path_distance[i] << endl;
     if (path_distance[i] < lowest_distance) {
       lowest_distance = path_distance[i];
       best_path = i;
     }
   }
 
+  int biterrors = 0;
   int state = best_path;
   for (int i = 47; i >= 0; i--) {
     decoded[i] = state;
     state = trace[i][state];
+
+    if((hard_decoded[i+1]&0x1) != (decoded[i]&0x1)) {
+      biterrors++;
+    }
+    if((hard_decoded[i+1]&0x2) != (decoded[i]&0x2)) {
+      biterrors++;
+    }
   }
+
+  return biterrors;
 }
 
 /* Decodes 3/4 rate encoded bits using viterbi.
  * encoded - 196 bits - 48 pairs of dibits
  * decoded - 144 bits - 48 tribits
  */
-void viterbi_3_4_decode(uint8_t * encoded, uint8_t * decoded)
+int viterbi_3_4_decode(uint8_t * encoded, uint8_t * decoded)
 {
   const uint8_t table[8][8] = {
     { 0x0, 0x8, 0x4, 0xC, 0x2, 0xA, 0x6, 0xE },
@@ -279,6 +308,9 @@ void viterbi_3_4_decode(uint8_t * encoded, uint8_t * decoded)
   // this matrix is for building the paths.  Each point will be populated 
   // with the previous state at that point
   int trace[48][8]; // trace of previous points
+
+  uint8_t hard_decoded[49];
+  hard_decoded[0] = 0;
 
   int path_distance[8];
   for (int path = 0; path < 8; path++) path_distance[path] = 0;
@@ -290,6 +322,23 @@ void viterbi_3_4_decode(uint8_t * encoded, uint8_t * decoded)
     uint8_t codeword = encoded[i/4] & 0xF;
     int dist[8]; // distance from one point to the next 4 points
 
+    uint8_t hard_codeword = encoded[i/4] & 0xF;
+    int k = i/4;
+    int min_dist = count_bits_4(hard_codeword ^ table[hard_decoded[k]][0]);
+    if(min_dist) {
+      for(int l = 1; l < 8; l++) {
+        int dist = count_bits_4(hard_codeword ^ table[hard_decoded[k]][l]);
+        if (dist < min_dist) {
+          min_dist = dist;
+          hard_decoded[k+1] = l;
+        }
+        if(!min_dist)
+          break;
+      }
+    } else {
+      hard_decoded[k+1] = 0;
+    }
+
     if (i == 0) {
       for (int next = 0; next < 8; next++) {
         next_path_distance[next] = count_bits_4(codeword ^ table[0][next]);
@@ -307,11 +356,6 @@ void viterbi_3_4_decode(uint8_t * encoded, uint8_t * decoded)
         trace[i/4][next] = prev; // trace the previous position of this next point
       }
     }
-    cout << i << "\t";
-    for(int j = 0; j < 7; j++) {
-      cout << trace[i/4][j] << "(" << next_path_distance[j] << ") , ";
-    }
-    cout << trace[i/4][7] << "(" << next_path_distance[7] << ")" << endl;
     for (int j = 0; j < 8; j++) {
       path_distance[j] = next_path_distance[j];
     }
@@ -320,27 +364,38 @@ void viterbi_3_4_decode(uint8_t * encoded, uint8_t * decoded)
   // pick the path with the lowest distance
   int lowest_distance = path_distance[0];
   int best_path = 0;
-  cout << "3/4 hard, path_distance[0]: " << path_distance[0] << endl;
   for (int i = 1; i < 8; i++) {
-    cout << "lowest: " << lowest_distance << ", distance[" << i << "]: " << path_distance[i] << endl;
     if (path_distance[i] < lowest_distance) {
       lowest_distance = path_distance[i];
       best_path = i;
     }
   }
 
+  int biterrors = 0;
   int state = best_path;
   for (int i = 47; i >= 0; i--) {
     decoded[i] = state;
     state = trace[i][state];
+
+    if((hard_decoded[i+1]&0x1) != (decoded[i]&0x1)) {
+      biterrors++;
+    }
+    if((hard_decoded[i+1]&0x2) != (decoded[i]&0x2)) {
+      biterrors++;
+    }
+    if((hard_decoded[i+1]&0x4) != (decoded[i]&0x4)) {
+      biterrors++;
+    }
   }
+
+  return biterrors;
 }
 
 /* Decodes 1/2 rate encoded bits using viterbi.
  * encoded - 196 bits - 196 float soft bits
  * decoded - 96 bits - 48 dibits
  */
-void viterbi_1_2_decode(float * encoded, uint8_t * decoded)
+int viterbi_1_2_decode(float * encoded, uint8_t * hard_encoded, uint8_t * decoded)
 {
   const uint8_t table[4][4] = {
     {0x0, 0xF, 0xC, 0x3},
@@ -348,23 +403,44 @@ void viterbi_1_2_decode(float * encoded, uint8_t * decoded)
     {0xD, 0x2, 0x1, 0xE},
     {0x9, 0x6, 0x5, 0xA}
   };
+
   // this matrix is for building the paths.  Each point will be populated 
   // with the previous state at that point
   int trace[48][4]; // trace of previous points
+
+  uint8_t hard_decoded[49];
+  hard_decoded[0] = 0;
 
   float path_distance[4];
   for (int path = 0; path < 4; path++) path_distance[path] = 0;
 
   float next_path_distance[4];
-  
+
   for (int i = 0; i < 192; i += 4)
   {
     float * codewordPtr = &encoded[i]; // is a float now    
     float dist[4]; // distance from one point to the next 4 points
 
+    uint8_t hard_codeword = hard_encoded[i/4] & 0xF;
+    int k = i/4;
+    int min_dist = count_bits_4(hard_codeword ^ table[hard_decoded[k]][0]);
+    if(min_dist) {
+      for(int l = 1; l < 4; l++) {
+        int dist = count_bits_4(hard_codeword ^ table[hard_decoded[k]][l]);
+        if (dist < min_dist) {
+          min_dist = dist;
+          hard_decoded[k+1] = l;
+        }
+        if(!min_dist)
+          break;
+      }
+    } else {
+      hard_decoded[k+1] = 0;
+    }
+
     if (i == 0) {
       for (int next = 0; next < 4; next++) {
-        next_path_distance[next] = distance(table[0][next], codewordPtr);
+        path_distance[next] = distance(table[0][next], codewordPtr);
 
         trace[0][next] = 0; // all points come from 0 at the start 
       }
@@ -378,36 +454,38 @@ void viterbi_1_2_decode(float * encoded, uint8_t * decoded)
         next_path_distance[next] = dist[prev]; // store the distance for this prev
         trace[i/4][next] = prev; // trace the previous position of this next point
       }
-    }
-    for (int j = 0; j < 4; j++) {
-      path_distance[j] = next_path_distance[j];
+
+      for (int j = 0; j < 4; j++) {
+        path_distance[j] = next_path_distance[j];
+      }
     }
   }    
 
   // pick the path with the lowest distance
-  float lowest_distance = path_distance[0];
-  int best_path = 0;
-  cout << "1/2 soft, path_distance[0]: " << path_distance[0] << endl;
-  for (int i = 1; i < 4; i++) {
-    cout << "lowest: " << lowest_distance << ", distance[" << i << "]: " << path_distance[i] << endl;
-    if (path_distance[i] < lowest_distance) {
-      lowest_distance = path_distance[i];
-      best_path = i;
-    }
-  }
+  int best_path = find_min(path_distance, 4);
 
+  int biterrors = 0;
   int state = best_path;
   for (int i = 47; i >= 0; i--) {
     decoded[i] = state;
     state = trace[i][state];
+
+    if((hard_decoded[i+1]&0x1) != (decoded[i]&0x1)) {
+      biterrors++;
+    }
+    if((hard_decoded[i+1]&0x2) != (decoded[i]&0x2)) {
+      biterrors++;
+    }
   }
+
+  return biterrors;
 }
 
 /* Decodes 3/4 rate encoded bits using viterbi.
  * encoded - 196 bits - 48 pairs of dibits
  * decoded - 144 bits - 48 tribits
  */
-void viterbi_3_4_decode(float * encoded, uint8_t * decoded)
+int viterbi_3_4_decode(float * encoded, uint8_t * hard_encoded, uint8_t * decoded)
 {
   const uint8_t table[8][8] = {
     { 0x0, 0x8, 0x4, 0xC, 0x2, 0xA, 0x6, 0xE },
@@ -423,6 +501,9 @@ void viterbi_3_4_decode(float * encoded, uint8_t * decoded)
   // with the previous state at that point
   int trace[48][8]; // trace of previous points
 
+  uint8_t hard_decoded[49];
+  hard_decoded[0] = 0;
+
   float path_distance[8];
   for (int path = 0; path < 8; path++) path_distance[path] = 0;
 
@@ -432,6 +513,23 @@ void viterbi_3_4_decode(float * encoded, uint8_t * decoded)
   {
     float * codewordPtr = &encoded[i]; // is a float now    
     float dist[8]; // distance from one point to the next 4 points
+
+    uint8_t hard_codeword = hard_encoded[i/4] & 0xF;
+    int k = i/4;
+    int min_dist = count_bits_4(hard_codeword ^ table[hard_decoded[k]][0]);
+    if(min_dist) {
+      for(int l = 1; l < 8; l++) {
+        int dist = count_bits_4(hard_codeword ^ table[hard_decoded[k]][l]);
+        if (dist < min_dist) {
+          min_dist = dist;
+          hard_decoded[k+1] = l;
+        }
+        if(!min_dist)
+          break;
+      }
+    } else {
+      hard_decoded[k+1] = 0;
+    }
 
     if (i == 0) {
       for (int next = 0; next < 8; next++) {
@@ -458,20 +556,31 @@ void viterbi_3_4_decode(float * encoded, uint8_t * decoded)
   // pick the path with the lowest distance
   float lowest_distance = path_distance[0];
   int best_path = 0;
-  cout << "1/2 soft, path_distance[0]: " << path_distance[0] << endl;
   for (int i = 1; i < 8; i++) {
-    cout << "lowest: " << lowest_distance << ", distance[" << i << "]: " << path_distance[i] << endl;
     if (path_distance[i] < lowest_distance) {
       lowest_distance = path_distance[i];
       best_path = i;
     }
   }
 
+  int biterrors = 0;
   int state = best_path;
   for (int i = 47; i >= 0; i--) {
     decoded[i] = state;
     state = trace[i][state];
+
+    if((hard_decoded[i+1]&0x1) != (decoded[i]&0x1)) {
+      biterrors++;
+    }
+    if((hard_decoded[i+1]&0x2) != (decoded[i]&0x2)) {
+      biterrors++;
+    }
+    if((hard_decoded[i+1]&0x4) != (decoded[i]&0x4)) {
+      biterrors++;
+    }
   }
+
+  return biterrors;
 }
 
 void bits_to_symbols(uint8_t * dibitpairs, int len, float * symbols) {
@@ -614,9 +723,12 @@ int main() {
   trellis_1_2_encode(inBlock, outBlock);
 
   cout << "1/2 rate decoding test ***********" << endl;
-  cout << "stddev, hard errors, soft errors, hard ber, soft ber" << endl;
-  for(int i = 0; i < 1; i++) {
-    stddev = 0.1 * i;
+
+  fstream fs;
+  fs.open("test_1_2.csv");
+  fs << "stddev, reported hard errors, reported soft errors, hard errors, soft errors, hard ber, soft ber" << endl;
+  for(int i = 0; i < 100; i++) {
+    stddev = 0.01 * i;
 
     zero(hardbits, 48);
     zero(decoded_hard, 48);
@@ -624,12 +736,12 @@ int main() {
 
     bits_to_symbols(outBlock, 48, symbols);
 
-    // noisy_channel(symbols, 96, stddev);
+    noisy_channel(symbols, 96, stddev);
 
     symbols_to_bits(symbols, 96, hardbits, softbits);
 
-    viterbi_1_2_decode(hardbits, decoded_hard);
-    viterbi_1_2_decode(softbits, decoded_soft);
+    int repHardErrors = viterbi_1_2_decode(hardbits, decoded_hard);
+    int repSoftErrors = viterbi_1_2_decode(softbits, hardbits, decoded_soft);
 
     hardErrors = test_1_2(inBlock, decoded_hard, 48);
     softErrors = test_1_2(inBlock, decoded_soft, 48);
@@ -642,7 +754,8 @@ int main() {
     // cout << "soft decode, stddev: " << stddev << ", errors: " 
     //   << softErrors << "/96 bits, ber: " << softBer << endl;
 
-    cout << stddev << ", " << hardErrors << ", " 
+    fs << stddev << ", " << repHardErrors << ", " 
+     << repSoftErrors << ", " << hardErrors << ", " 
      << softErrors << ", " << hardBer << ", "
      << softBer << endl; 
 
@@ -652,6 +765,8 @@ int main() {
 
   }
 
+  fs.close();
+
   for(int i = 0; i < 48; i++) {
     inBlock[i] = i % 8; // tribits
   }
@@ -659,9 +774,11 @@ int main() {
   trellis_3_4_encode(inBlock, outBlock);
 
   cout << "3/4 rate decoding test ***********" << endl;
-  cout << "stddev, hard errors, soft errors, hard ber, soft ber" << endl;
-  for(int i = 0; i < 1; i++) {
-    stddev = 0.1 * i;
+
+  fs.open("test_3_4.csv");
+  fs << "stddev, reported hard errors, reported soft errors, hard errors, soft errors, hard ber, soft ber" << endl;
+  for(int i = 0; i < 100; i++) {
+    stddev = 0.01 * i;
 
     zero(hardbits, 48);
     zero(decoded_hard, 48);
@@ -669,17 +786,12 @@ int main() {
 
     bits_to_symbols(outBlock, 48, symbols);
 
-    // noisy_channel(symbols, 96, stddev);
+    noisy_channel(symbols, 96, stddev);
 
     symbols_to_bits(symbols, 96, hardbits, softbits);
 
-    viterbi_3_4_decode(hardbits, decoded_hard);
-    viterbi_3_4_decode(softbits, decoded_soft);
-
-    cout << "inBlock" << endl;
-    print_array(inBlock, 48);
-    cout << "decoded_soft" << endl;
-    print_array(decoded_soft, 48);
+    int repHardErrors = viterbi_3_4_decode(hardbits, decoded_hard);
+    int repSoftErrors = viterbi_3_4_decode(softbits, hardbits, decoded_soft);
 
     hardErrors = test_3_4(inBlock, decoded_hard, 48);
     softErrors = test_3_4(inBlock, decoded_soft, 48);
@@ -687,20 +799,23 @@ int main() {
     hardBer = (float)hardErrors / 144.0;
     softBer = (float)softErrors / 144.0;
 
-    cout << "hard decode, stddev: " << stddev << ", errors: " 
-      << hardErrors << "/144 bits, ber: " << hardBer << endl;
-    cout << "soft decode, stddev: " << stddev << ", errors: " 
-      << softErrors << "/144 bits, ber: " << softBer << endl;
+    // cout << "hard decode, stddev: " << stddev << ", errors: " 
+    //   << hardErrors << "/144 bits, ber: " << hardBer << endl;
+    // cout << "soft decode, stddev: " << stddev << ", errors: " 
+    //   << softErrors << "/144 bits, ber: " << softBer << endl;
 
-    // cout << stddev << ", " << hardErrors << ", " 
-    //  << softErrors << ", " << hardBer << ", "
-    //  << softBer << endl; 
+    fs << stddev << ", " << repHardErrors << ", " 
+     << repSoftErrors << ", " << hardErrors << ", " 
+     << softErrors << ", " << hardBer << ", "
+     << softBer << endl;
 
     if(hardErrors == 144 && softErrors == 144) {
       break;
     }
 
   }
+
+  fs.close();
 
   return 0;
 }
