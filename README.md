@@ -19,6 +19,12 @@ Generic viterbi implementation based on P25 Air interface
 
 On page 34 of BAAA-A of the P25 spec there is this table that corrisponds dibit pairs to these values.  This table was used to traslate the above table gotten from page 33 of the same document.
 
+ Bits      Symbol
+    01         +3
+    00         +1
+    10         -1
+    11         -3
+
 0 0b0010
 1 0b1010
 2 0b0111
@@ -35,3 +41,15 @@ On page 34 of BAAA-A of the P25 spec there is this table that corrisponds dibit 
 13 0b1001
 14 0b0100
 15 0b1100
+
+// normal
+ const uint8_t table[4][4] = {
+    {0b0010, 0b1100, 0b0001, 0b1111},
+    {0b1110, 0b0000, 0b1101, 0b0011},
+    {0b1001, 0b0111, 0b1010, 0b0100},
+    {0b0101, 0b1011, 0b0110, 0b1000}
+  };
+
+** Interleaver
+
+Interleaver for p25 from BAAA-A 7.2 for use with arrays of hard and soft bits.
